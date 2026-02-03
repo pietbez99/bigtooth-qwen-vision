@@ -23,6 +23,7 @@ COPY handler.py /app/handler.py
 ENV PYTHONUNBUFFERED=1
 ENV TRANSFORMERS_CACHE=/runpod-volume/huggingface
 ENV HF_HOME=/runpod-volume/huggingface
+ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # Start handler
 CMD ["python", "-u", "/app/handler.py"]

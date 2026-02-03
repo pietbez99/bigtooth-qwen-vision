@@ -5,6 +5,7 @@ Analyzes 4 brushing session photos to verify legitimate brushing activity.
 Returns JSON with approval decision and detailed analysis.
 """
 
+import os
 import runpod
 import torch
 import base64
@@ -15,6 +16,9 @@ from io import BytesIO
 from PIL import Image
 from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
 from qwen_vl_utils import process_vision_info
+
+# Enable PyTorch memory fragmentation fix
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
 
 # Global model and processor (loaded once at startup)
 model = None
@@ -43,7 +47,7 @@ def load_model():
     processor = AutoProcessor.from_pretrained(
         "Qwen/Qwen2-VL-7B-Instruct",
         min_pixels=256*28*28,
-        max_pixels=1280*28*28
+        max_pixels=768*28*28  # Reduced from 1280 to save GPU memory
     )
 
     print("Model loaded successfully!")
@@ -347,10 +351,20 @@ def handler(job):
 
         # Parse and return result
         result = parse_ai_response(output_text, strict_mode)
+
+        # Clean up GPU memory after inference
+        del inputs
+        del generated_ids
+        del generated_ids_trimmed
+        torch.cuda.empty_cache()
+
         return result
 
     except Exception as e:
         print(f"Error during inference: {e}")
+
+        # Clean up GPU memory on error
+        torch.cuda.empty_cache()
         return {
             "success": False,
             "approved": True,  # Fail-safe: approve on error
