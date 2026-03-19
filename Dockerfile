@@ -1,13 +1,13 @@
 # Qwen2-VL-7B-Instruct RunPod Serverless Docker Image
 # For BigTooth brushing session verification
-# Model downloads at first run (cold start), then cached on volume
+# Model cached on RunPod persistent volume after first download
 
-FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+FROM runpod/pytorch:2.2.0-py3.10-cuda12.1.1-devel-ubuntu22.04
 
 # Set working directory
 WORKDIR /app
 
-# Install Python dependencies only (model downloads at runtime)
+# Install Python dependencies
 RUN pip install --no-cache-dir \
     runpod \
     transformers>=4.45.0 \
@@ -23,7 +23,6 @@ COPY handler.py /app/handler.py
 ENV PYTHONUNBUFFERED=1
 ENV TRANSFORMERS_CACHE=/runpod-volume/huggingface
 ENV HF_HOME=/runpod-volume/huggingface
-ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # Start handler
 CMD ["python", "-u", "/app/handler.py"]

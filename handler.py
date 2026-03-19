@@ -110,17 +110,25 @@ def handler(job):
     if len(images) == 0:
         return {"success": False, "error": "No images could be loaded"}
 
-    # Build message with images
-    content = [{"type": "text", "text": "Analyze these images:"}]
+    # Build message with images and prompt
+    # Images first, then the caller's prompt as the instruction
+    content = []
     for img in images:
         content.append({"type": "image", "image": img})
+    content.append({"type": "text", "text": prompt})
 
     messages = [
-        {"role": "system", "content": prompt},
         {"role": "user", "content": content}
     ]
 
+    import gc
+
     try:
+        # Log VRAM before inference
+        alloc_mb = torch.cuda.memory_allocated() / 1024 / 1024
+        reserved_mb = torch.cuda.memory_reserved() / 1024 / 1024
+        print(f"VRAM before inference: {alloc_mb:.0f}MB allocated, {reserved_mb:.0f}MB reserved")
+
         text = processor.apply_chat_template(
             messages,
             tokenize=False,
@@ -172,9 +180,24 @@ def handler(job):
 
         return result
 
+    except RuntimeError as e:
+        error_str = str(e)
+        print(f"RuntimeError during inference: {error_str}")
+        # CUDA errors leave GPU in unrecoverable state — let worker crash
+        # so RunPod restarts it with a clean CUDA context
+        if "CUDA" in error_str or "cuda" in error_str or "device-side assert" in error_str:
+            print("Fatal CUDA error — letting worker crash for clean restart")
+            raise
+        return {"success": False, "error": error_str}
+
     except Exception as e:
         print(f"Error during inference: {e}")
         return {"success": False, "error": str(e)}
+
+    finally:
+        # Clean up VRAM between jobs to prevent memory creep
+        torch.cuda.empty_cache()
+        gc.collect()
 
 load_model()
 runpod.serverless.start({"handler": handler})
